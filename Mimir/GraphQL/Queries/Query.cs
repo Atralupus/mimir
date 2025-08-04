@@ -10,6 +10,7 @@ using Mimir.GraphQL.Objects;
 using Mimir.GraphQL.Types;
 using Mimir.MongoDB;
 using Mimir.MongoDB.Bson;
+using Mimir.MongoDB.Exceptions;
 using Mimir.MongoDB.Repositories;
 using Mimir.Services;
 using Nekoyume;
@@ -46,8 +47,23 @@ public class Query
     /// </summary>
     /// <param name="address">The address of the agent.</param>
     /// <returns>The agent state</returns>
-    public async Task<AgentState> GetAgentAsync(Address address, [Service] IAgentRepository repo) =>
-        (await repo.GetByAddressAsync(address)).Object;
+    public async Task<AgentState> GetAgentAsync(
+        Address address,
+        [Service] IAgentRepository repo,
+        [Service] IHangfireJobService hangfireJobService
+    )
+    {
+        try
+        {
+            var result = await repo.GetByAddressAsync(address);
+            return result.Object;
+        }
+        catch (DocumentNotFoundInMongoCollectionException)
+        {
+            hangfireJobService.EnqueueAgentDataCompletion(address.ToString());
+            throw;
+        }
+    }
 
     /// <summary>
     /// Get an avatar state by address.
@@ -56,8 +72,21 @@ public class Query
     /// <returns>The avatar state</returns>
     public async Task<AvatarState> GetAvatarAsync(
         Address address,
-        [Service] IAvatarRepository repo
-    ) => (await repo.GetByAddressAsync(address)).Object;
+        [Service] IAvatarRepository repo,
+        [Service] IHangfireJobService hangfireJobService
+    )
+    {
+        try
+        {
+            var result = await repo.GetByAddressAsync(address);
+            return result.Object;
+        }
+        catch (DocumentNotFoundInMongoCollectionException)
+        {
+            hangfireJobService.EnqueueAvatarDataCompletion(address.ToString());
+            throw;
+        }
+    }
 
     /// <summary>
     /// Get the balance of a specific currency for a given address.
@@ -150,10 +179,10 @@ public class Query
     /// </summary>
     /// <param name="txId">Transaction ID.</param>
     /// <returns>The Transaction Information</returns>
-    public async Task<TransactionDocument> GetTransactionAsync(string txId, [Service] ITransactionRepository repo) =>
-        await repo.GetByTxIdAsync(txId);
-
-
+    public async Task<TransactionDocument> GetTransactionAsync(
+        string txId,
+        [Service] ITransactionRepository repo
+    ) => await repo.GetByTxIdAsync(txId);
 
     /// <summary>
     /// Get an pet state by avatar address.

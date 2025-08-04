@@ -14,63 +14,108 @@
 >
 > https://nine-chronicles.dev/
 
-# What is Mimir?
+# Mimir
 
-Mimir is a service that allows you to easily query real-time data from the Nine Chronicles chain via GraphQL.
-Since all data is stored in DocumentDB (MongoDB), fast queries through indexing are possible.
+Mimir is a GraphQL API for 9c blockchain data.
 
-## How to use?
+## Projects
 
-Odin: https://mimir.nine-chronicles.dev/odin/graphql/
-Heimdall: https://mimir.nine-chronicles.dev/heimdall/graphql/
+- **Mimir**: Main GraphQL API
+- **Mimir.Worker**: Background service for blockchain data synchronization
+- **Mimir.HangfireWorker**: Background service for asynchronous data completion using Hangfire
+- **Mimir.HangfireAPI**: Hangfire dashboard API for monitoring jobs
+- **Mimir.MongoDB**: MongoDB data access layer
+- **Mimir.Initializer**: Data initialization service
+- **Lib9c.GraphQL**: GraphQL types and extensions
+- **Lib9c.Models**: Data models
 
-It can be used on both Planets, and you can use [Nitro](https://chillicream.com/docs/nitro/explore-the-ui) to create GraphQL queries in a UI.
+## Architecture
 
-## Structure
+### Data Flow
+1. **Mimir.Worker**: Continuously polls blockchain data and stores in MongoDB
+2. **Mimir API**: Serves GraphQL requests from MongoDB
+3. **Mimir.HangfireWorker**: Handles asynchronous data completion when data is missing
 
-Mimir is composed of Mimir, which provides GraphQL, Mimir.Worker, which syncs data, and a database.
-Mimir.Worker periodically fetches chain data and stores it in the database (MongoDB), while Mimir provides this data via GraphQL.
+### Hangfire Worker System
+- **Redis**: Used as message broker for Hangfire jobs
+- **Data Completion**: When GraphQL requests find missing Agent/Avatar data, jobs are queued
+- **NotFound Cache**: Prevents repeated attempts for non-existent data (7-day cache)
+- **Monitoring**: Hangfire dashboard available at `/hangfire` endpoint
 
-```mermaid
-flowchart TD
-    Mimir[Mimir - GraphQL Service]
-    MimirWorker[Mimir.Worker - Data Sync]
-    MongoDB[(MongoDB - Database)]
-    NineChroniclesChain[Nine Chronicles Chain]
+## Setup
 
-    NineChroniclesChain -->|Fetches Data| MimirWorker
-    MimirWorker -->|Stores Data| MongoDB
-    MongoDB -->|Fetches Data| Mimir
+### Prerequisites
+- .NET 8.0
+- MongoDB
+- Redis
+
+### Running with Docker Compose
+```bash
+docker-compose up -d
 ```
 
-## Check Sync Index
+### Configuration
+Set environment variables for each service:
 
-Mimir synchronizes Nine Chronicles chain data with Mimir's database using Pollers.
-Due to this, there may be differences between the actual chain and the stored data, and you can check which index the data is stored up to through the metadata collection.
+#### Mimir API
+- `MONGODB_CONNECTION_STRING`: MongoDB connection string
+- `PLANET_TYPE`: Planet type (e.g., "odin")
 
-```graphql
-query {
-    metadata(collectionName: "avatar") {
-        latestBlockIndex
-    }
-}
+#### Mimir.Worker
+- `WORKER_CONFIG_FILE`: Configuration file path
+- `WORKER_POLLER_TYPE`: Poller type (BlockPoller, TxPoller, DiffPoller)
+
+#### Mimir.HangfireWorker
+- `HANGFIRE_REDIS_CONNECTION_STRING`: Redis connection string
+- `HANGFIRE_MONGODB_CONNECTION_STRING`: MongoDB connection string
+- `HANGFIRE_HEADLESS_ENDPOINTS`: Headless GraphQL endpoints
+- `HANGFIRE_JWT_ISSUER`: JWT issuer
+- `HANGFIRE_JWT_SECRET_KEY`: JWT secret key
+
+#### Mimir.HangfireAPI
+- `HANGFIRE_API_REDIS_CONNECTION_STRING`: Redis connection string
+
+## Development
+
+### Building
+```bash
+dotnet build
 ```
 
-## Applications
+### Running Tests
+```bash
+dotnet test
+```
 
-Check out an example of a website created using Mimir: https://nine-chronicles.dev/tutorials/modding/avatar-information-dapp-guide
-Create various applications using Mimir!
+### Running Individual Services
+```bash
+# GraphQL API
+dotnet run --project Mimir
 
-## Limitations
+# Blockchain Worker
+dotnet run --project Mimir.Worker
 
-Mimir has a default rate limit.
-If you need more access, please contact us on the Dev Discord with your use case and expected usage, and we will issue a key without restrictions.
+# Hangfire Worker
+dotnet run --project Mimir.HangfireWorker
 
-## Contribution
+# Hangfire Dashboard
+dotnet run --project Mimir.HangfireAPI
+```
 
-If you want to contribute to the Mimir project, please check the [Contributor guide](CONTRIBUTING.md).
-If you have suggestions or topics you'd like to discuss, please use the [Discussions](https://github.com/planetarium/mimir/discussions) section.
+## Data Completion Workflow
 
-## License
+1. **GraphQL Request**: Client requests Agent/Avatar data
+2. **Data Check**: API checks if data exists in MongoDB
+3. **Job Queue**: If data is missing, Hangfire job is queued
+4. **Blockchain Check**: Worker checks if data exists in blockchain
+5. **Data Storage**: If found, data is stored in MongoDB
+6. **Cache Management**: If not found, address is cached for 7 days
 
-Please note that Mimir is licensed under the AGPL-3.0 license. However, with the exception of the logo image, it is not licensed under AGPL-3.0. This is because it is Planetarium's asset.
+## Monitoring
+
+- **Hangfire Dashboard**: Access at `http://localhost:5000/hangfire`
+- **Job Monitoring**: View job status, retry failed jobs, monitor performance
+- **Redis Keys**: 
+  - `hangfire:*`: Hangfire job data
+  - `notfound:agent:*`: Cached non-existent agent addresses
+  - `notfound:avatar:*`: Cached non-existent avatar addresses

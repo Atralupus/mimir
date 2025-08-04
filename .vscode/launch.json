@@ -28,6 +28,19 @@
       }
     },
     {
+      "name": "Debug Mimir.HangfireWorker",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/Mimir.HangfireWorker/bin/Debug/net8.0/Mimir.HangfireWorker.dll",
+      "cwd": "${workspaceFolder}/Mimir.HangfireWorker",
+      "stopAtEntry": false,
+      "console": "internalConsole",
+      "preLaunchTask": "build-hangfire-worker",
+      "env": {
+        "HANGFIRE_CONFIG_FILE": "appsettings.local.json"
+      }
+    },
+    {
       "name": "Debug Mimir.Initializer",
       "type": "coreclr",
       "request": "launch",

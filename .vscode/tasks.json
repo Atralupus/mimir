@@ -108,6 +108,30 @@
                 "${workspaceFolder}/Mimir.Initializer/Mimir.Initializer.csproj"
             ],
             "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "build-hangfire-worker",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/Mimir.HangfireWorker/Mimir.HangfireWorker.csproj",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "publish-hangfire-worker",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "publish",
+                "${workspaceFolder}/Mimir.HangfireWorker/Mimir.HangfireWorker.csproj",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "problemMatcher": "$msCompile"
         }
     ]
 }

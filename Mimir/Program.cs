@@ -2,6 +2,8 @@ using System.Numerics;
 using System.Security.Cryptography;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using Hangfire;
+using Hangfire.Redis.StackExchange;
 using Lib9c.GraphQL.Types;
 using Lib9c.Models.Block;
 using Libplanet.Common;
@@ -30,6 +32,9 @@ builder.Services.Configure<JwtOption>(
 );
 builder.Services.Configure<WncgApiOption>(
     builder.Configuration.GetRequiredSection(WncgApiOption.SectionName)
+);
+builder.Services.Configure<RedisOptions>(
+    builder.Configuration.GetRequiredSection(RedisOptions.SectionName)
 );
 
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -83,6 +88,41 @@ builder.Services.AddSingleton<ICpRepository<ArenaCpDocument>, CpRepository<Arena
 builder.Services.AddSingleton<ICpRepository<RaidCpDocument>, CpRepository<RaidCpDocument>>();
 
 // ~MongoDB repositories.
+builder.Services.AddSingleton<IHangfireJobService, HangfireJobService>();
+
+builder.Services.AddHangfire(
+    (provider, config) =>
+    {
+        var redisOptions = provider.GetRequiredService<IOptions<RedisOptions>>().Value;
+
+        var redisConfig = new StackExchange.Redis.ConfigurationOptions
+        {
+            DefaultDatabase = redisOptions.HangfireDbNumber,
+        };
+
+        redisConfig.EndPoints.Add(redisOptions.Host, int.Parse(redisOptions.Port));
+
+        if (!string.IsNullOrEmpty(redisOptions.Username))
+        {
+            redisConfig.User = redisOptions.Username;
+        }
+
+        if (!string.IsNullOrEmpty(redisOptions.Password))
+        {
+            redisConfig.Password = redisOptions.Password;
+        }
+
+        config.UseRedisStorage(
+            StackExchange.Redis.ConnectionMultiplexer.Connect(redisConfig),
+            new Hangfire.Redis.StackExchange.RedisStorageOptions
+            {
+                Prefix = redisOptions.HangfirePrefix,
+                Db = redisOptions.HangfireDbNumber,
+            }
+        );
+    }
+);
+
 builder.Services.AddCors();
 builder.Services.AddHttpClient();
 builder
@@ -92,17 +132,21 @@ builder
     .AddMimirGraphQLTypes()
     .AddErrorFilter<ErrorFilter>()
     .AddMongoDbPagingProviders(providerName: "MongoDB", defaultProvider: true)
-    .SetPagingOptions(new HotChocolate.Types.Pagination.PagingOptions
-    {
-        MaxPageSize = 300,
-        DefaultPageSize = 100
-    })
+    .SetPagingOptions(
+        new HotChocolate.Types.Pagination.PagingOptions { MaxPageSize = 300, DefaultPageSize = 100 }
+    )
     .BindRuntimeType(typeof(Address), typeof(AddressType))
     .BindRuntimeType(typeof(BigInteger), typeof(BigIntegerType))
     .BindRuntimeType(typeof(HashDigest<SHA256>), typeof(HashDigestSHA256Type))
     .BindRuntimeType(typeof(Lib9c.Models.Block.Action), typeof(Lib9c.GraphQL.Types.ActionType))
-    .BindRuntimeType(typeof(Lib9c.Models.Block.Transaction), typeof(Lib9c.GraphQL.Types.TransactionType))
-    .BindRuntimeType(typeof(MongoDB.Bson.BsonDocument), typeof(Lib9c.GraphQL.Types.BsonDocumentType))
+    .BindRuntimeType(
+        typeof(Lib9c.Models.Block.Transaction),
+        typeof(Lib9c.GraphQL.Types.TransactionType)
+    )
+    .BindRuntimeType(
+        typeof(MongoDB.Bson.BsonDocument),
+        typeof(Lib9c.GraphQL.Types.BsonDocumentType)
+    )
     .ModifyRequestOptions(requestExecutorOptions =>
     {
         requestExecutorOptions.IncludeExceptionDetails = true;
@@ -144,7 +188,7 @@ builder.Services.AddRateLimiter(limiterOptions =>
                         rateLimitOptions.ReplenishmentPeriod
                     ),
                     TokensPerPeriod = rateLimitOptions.TokensPerPeriod,
-                    AutoReplenishment = rateLimitOptions.AutoReplenishment
+                    AutoReplenishment = rateLimitOptions.AutoReplenishment,
                 }
             );
         }
